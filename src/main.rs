@@ -1,4 +1,5 @@
 use rchat::args::Config;
+use rchat::client::Client;
 use rchat::server::Server;
 use std::env;
 use std::process;
@@ -12,7 +13,14 @@ fn main() {
     });
 
     match config {
-        Config::Client => {}
+        Config::Client => {
+            let client = Client::new();
+
+            client.connect().unwrap_or_else(|err| {
+                eprintln!("{}", err);
+                process::exit(1)
+            })
+        }
         Config::Server => {
             println!("Starting Rex Chat Server");
             let server = Server::new().unwrap();
