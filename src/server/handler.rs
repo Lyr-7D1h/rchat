@@ -20,7 +20,11 @@ pub fn handle_connection(mut stream: net::TcpStream) {
                 } else {
                     format!("E Undefined Command: {}", char)
                 };
-                stream.write(error_message.as_bytes()).unwrap();
+
+                if let Err(err) = stream.write(error_message.as_bytes()) {
+                    println!("Client Error: {:?}", err);
+                    break;
+                }
             }
         }
 

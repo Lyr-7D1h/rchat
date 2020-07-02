@@ -19,7 +19,12 @@ impl Config {
                 "s" | "server" => Ok(Config::Server),
                 _ => Err(format!("Invalid option: {}", s)),
             },
-            None => Err("No server/client option given".to_string()),
+            None => Err(r#"Rex Chat
+Lyr-7D1h <lyr-7d1h@pm.me>
+
+Usage:
+    rchat <client|server>"#
+                .to_string()),
         }
     }
 }
