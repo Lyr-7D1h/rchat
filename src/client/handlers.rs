@@ -2,36 +2,49 @@ use std::io;
 use std::io::Read;
 use std::io::Write;
 use std::net;
-use std::sync::{Arc, Mutex};
 
-type ThreadedStream = Arc<Mutex<net::TcpStream>>;
+use crate::parser::{parse, Message};
 
-pub fn listen(stream: ThreadedStream) -> io::Result<()> {
+pub fn listen(mut stream: net::TcpStream) {
     let mut buffer = [0; 512];
 
     loop {
-        stream.lock().unwrap().read(&mut buffer).unwrap();
+        if let Err(err) = stream.read(&mut buffer) {
+            eprintln!("Dropped listener: {}", err);
+            break;
+        }
 
-        println!("Server: {:?}", stream);
+        let parsed_buffer = parse(&buffer);
+
+        match parsed_buffer {
+            Ok(message) => match message {
+                Message::Say { content } => {
+                    // println!("Server: {}", content);
+                }
+                _ => {}
+            },
+            Err(err) => {} //eprintln!("{}", err),
+        }
 
         io::empty().read(&mut buffer).unwrap();
     }
-
-    Ok(())
 }
 
-pub fn read_input(stream: ThreadedStream) -> io::Result<()> {
-    let mut buffer = [0; 512];
+pub fn read_input(mut stream: net::TcpStream) {
+    let mut buffer = vec![0; 511];
 
     loop {
-        io::stdin().read(&mut buffer)?;
+        io::stdin().read(&mut buffer).unwrap();
 
-        println!("Writing to server {:?}", buffer.to_ascii_lowercase());
+        // println!("{:?}", buffer);
+        buffer.pop();
+        let input = &[&[b'S'], &buffer[0..buffer.len()]].concat();
 
-        stream.lock().unwrap().write(&buffer)?;
+        if let Err(err) = stream.write(&input) {
+            eprintln!("Dropped io listener: {}", err);
+            break;
+        }
 
         io::empty().read(&mut buffer).unwrap();
     }
-
-    Ok(())
 }

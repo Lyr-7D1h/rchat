@@ -2,6 +2,7 @@ use rchat::args::Config;
 use rchat::client::Client;
 use rchat::server::Server;
 use std::env;
+use std::fmt;
 use std::process;
 
 fn main() {
@@ -18,13 +19,22 @@ fn main() {
 
             client.connect().unwrap_or_else(|err| {
                 eprintln!("{}", err);
-                process::exit(1)
+                process::exit(1);
             })
         }
         Config::Server => {
             println!("Starting Rex Chat Server");
-            let server = Server::new().unwrap();
+            let mut server = Server::new().unwrap_or_else(|err| {
+                eprintln!("{}", err);
+                process::exit(1);
+            });
+
             server.listen().unwrap();
         }
     }
+}
+
+fn print_exit<Error: fmt::Debug>(err: Error) {
+    eprintln!("{:?}", err);
+    process::exit(1);
 }
