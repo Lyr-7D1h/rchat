@@ -2,6 +2,7 @@ use std::io;
 use std::io::Read;
 use std::io::Write;
 use std::net;
+use std::str;
 
 use crate::parser::{parse, Message};
 
@@ -19,11 +20,13 @@ pub fn listen(mut stream: net::TcpStream) {
         match parsed_buffer {
             Ok(message) => match message {
                 Message::Say { content } => {
-                    // println!("Server: {}", content);
+                    println!("Server: {}", content);
                 }
                 _ => {}
             },
-            Err(err) => {} //eprintln!("{}", err),
+            Err(err) => {
+                eprintln!("{}", err);
+            }
         }
 
         io::empty().read(&mut buffer).unwrap();
@@ -31,19 +34,34 @@ pub fn listen(mut stream: net::TcpStream) {
 }
 
 pub fn read_input(mut stream: net::TcpStream) {
-    let mut buffer = vec![0; 511];
+    // let mut buffer = vec![0; 511];
+    let mut buffer = [0; 510]; //String::new();
+    println!("Say: ");
 
     loop {
-        io::stdin().read(&mut buffer).unwrap();
+        // buffer.push_str("S ");
 
-        // println!("{:?}", buffer);
-        buffer.pop();
-        let input = &[&[b'S'], &buffer[0..buffer.len()]].concat();
+        if let Err(err) = io::stdin().read(&mut buffer) {
+            eprintln!("{}", err);
+            break;
+        }
 
-        if let Err(err) = stream.write(&input) {
+        // buffer.pop();
+        // let input = &[&[b'S'], &[b' '], &buffer[0..buffer.len()]].concat();
+
+        let input = str::from_utf8(&buffer).unwrap();
+        // let input = &[&[b'S'], &[b' '], input.trim().as_bytes()].concat();
+        let input = format!("S {}", input.replace('\n', ""));
+
+        println!("RP: {}", input);
+
+        if let Err(err) = stream.write(input.trim_matches('\n').as_bytes()) {
+            //stream.write(buffer.trim().as_bytes()) {
             eprintln!("Dropped io listener: {}", err);
             break;
         }
+
+        stream.flush().unwrap();
 
         io::empty().read(&mut buffer).unwrap();
     }

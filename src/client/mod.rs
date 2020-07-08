@@ -15,6 +15,8 @@ impl Client {
     pub fn connect(&self) -> io::Result<()> {
         let stream = net::TcpStream::connect("127.0.0.1:7567")?;
 
+        println!("Connected..");
+
         // let stream = Arc::new(Mutex::new(stream));
 
         let mut threads = vec![];

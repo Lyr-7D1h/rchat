@@ -17,10 +17,7 @@ fn main() {
         Config::Client => {
             let client = Client::new();
 
-            client.connect().unwrap_or_else(|err| {
-                eprintln!("{}", err);
-                process::exit(1);
-            })
+            client.connect().unwrap_or_else(print_exit)
         }
         Config::Server => {
             println!("Starting Rex Chat Server");
