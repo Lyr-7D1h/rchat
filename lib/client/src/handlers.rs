@@ -4,7 +4,7 @@ use std::io::Write;
 use std::net;
 use std::str;
 
-use crate::parser::{parse, Message};
+use rchat_parser::{parse, Message};
 
 pub fn listen(mut stream: net::TcpStream) {
     let mut buffer = [0; 512];
@@ -19,8 +19,8 @@ pub fn listen(mut stream: net::TcpStream) {
 
         match parsed_buffer {
             Ok(message) => match message {
-                Message::Say { content } => {
-                    println!("Server: {}", content);
+                Message::Say(msg) => {
+                    println!("{:?}: {}", msg.timestamp, msg.content);
                 }
                 _ => {}
             },

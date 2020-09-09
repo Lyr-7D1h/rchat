@@ -2,6 +2,7 @@ extern crate ctrlc;
 use std::io;
 use std::net;
 use std::thread;
+use rchat_parser::{Message, parse};
 
 pub struct Client {}
 
@@ -14,8 +15,6 @@ impl Client {
 
     pub fn connect(&self) -> io::Result<()> {
         let stream = net::TcpStream::connect("127.0.0.1:7567")?;
-
-        println!("Connected..");
 
         // let stream = Arc::new(Mutex::new(stream));
 

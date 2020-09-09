@@ -1,17 +1,16 @@
-use connection::Connection;
+use rchat_parser::{parse, Message};
 use std::io;
 use std::io::prelude::*;
 use std::io::Read;
 use std::net;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::{parse, Message};
-
-mod connection;
+type Clients = Vec<mpsc::Sender<Arc<Message>>>;
 
 pub struct Server {
-    connections: Vec<Connection>,
+    clients: Mutex<Clients>,
     listener: net::TcpListener,
 }
 
@@ -20,7 +19,7 @@ impl Server {
         if let Ok(listener) = net::TcpListener::bind("127.0.0.1:7567") {
             let server = Server {
                 listener,
-                connections: vec![],
+                clients: Mutex::new(vec![]),
             };
 
             Ok(server)
@@ -30,51 +29,72 @@ impl Server {
     }
 
     pub fn shutdown(&self) -> io::Result<()> {
-        for conn in self.connections.iter() {
-            println!("Closing connection");
-            conn.shutdown()?;
+        for conn in self.clients.lock().unwrap().iter() {
+            return conn
+                .send(Arc::new(Message::Close))
+                .or_else(|err| Err(io::Error::new(io::ErrorKind::Other, err)));
         }
         Ok(())
     }
 
-    pub fn listen(&mut self) -> io::Result<()> {
+    // Listen for new clients
+    pub fn listen(self) -> io::Result<()> {
         let (tx, rx) = mpsc::channel();
 
-        thread::spawn(|| message_listener(rx));
+        let clients = Arc::new(self.clients);
+
+        let c = clients.clone();
+        thread::spawn(|| message_listener(c, rx));
 
         for stream in self.listener.incoming() {
             let stream = stream?;
 
-            let conn = Connection::new(stream, tx.clone())?;
+            let sender = tx.clone();
+
+            let (tx, rx) = mpsc::channel();
+
+            clients.lock().unwrap().push(tx);
 
             // TODO: fix ownership
-            thread::spawn(|| tcp_listener(&conn));
-
-            self.connections.push(conn);
+            thread::spawn(|| client_listener(stream, sender, rx));
         }
 
         Ok(())
     }
 }
 
-fn message_listener(rx: mpsc::Receiver<Message>) {
+fn message_listener(clients: Arc<Mutex<Clients>>, rx: mpsc::Receiver<Message>) {
     loop {
-        let mes = rx.recv().unwrap();
+        let mes = Arc::new(rx.recv().unwrap());
 
         println!("{:?}", mes);
+
+        for client in clients.lock().unwrap().iter() {
+            client.send(mes.clone()).unwrap();
+        }
     }
 }
 
-fn tcp_listener(connection: &Connection) {
+fn client_listener(
+    mut stream: net::TcpStream,
+    sender: mpsc::Sender<Message>,
+    receiver: mpsc::Receiver<Arc<Message>>,
+) {
     println!("New client");
 
-    let mut stream = connection.stream;
-    let sender = connection.sender;
+    stream.set_nonblocking(true).unwrap();
 
     let mut buffer = [0; 512];
-    let mut should_listen = true;
 
-    while should_listen {
+    loop {
+        if let Ok(mes) = receiver.try_recv() {
+            if let Err(err) = stream.write(mes.raw()) {
+                //stream.write(buffer.trim().as_bytes()) {
+                eprintln!("Dropped io listener: {}", err);
+                break;
+            }
+        }
+
         match stream.read(&mut buffer) {
             Ok(_) => {
                 let input = String::from_utf8_lossy(&buffer);
@@ -90,24 +110,30 @@ fn tcp_listener(connection: &Connection) {
                             panic!();
                         });
                     }
-
                     Err(err) => {
                         if let Err(err) = stream.write(err.as_bytes()) {
                             eprintln!("Client Error: {:?}", err);
-                            should_listen = false;
+                            break;
                         };
                     }
                 }
 
                 io::empty().read(&mut buffer).unwrap();
             }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                sleep();
+            }
             Err(err) => {
                 println!("Something went wrong: {}", err);
                 stream.shutdown(net::Shutdown::Both).unwrap();
-                should_listen = false;
+                break;
             }
         }
     }
 
     println!("Dropped client");
+}
+
+fn sleep() {
+    thread::sleep(::std::time::Duration::from_millis(100))
 }

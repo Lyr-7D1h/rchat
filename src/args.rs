@@ -23,7 +23,7 @@ impl Config {
 Lyr-7D1h <lyr-7d1h@pm.me>
 
 Usage:
-    rchat <client|server>"#
+    rchat <(client|c)|(server|s)>"#
                 .to_string()),
         }
     }

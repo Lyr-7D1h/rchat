@@ -1,3 +1,9 @@
+use std::time::SystemTime;
+
+mod message;
+
+pub use message::*;
+
 pub fn parse_string(input: &str) -> Result<Message, String> {
     if input.len() < 3 {
         return Err(format!(
@@ -7,13 +13,19 @@ pub fn parse_string(input: &str) -> Result<Message, String> {
     };
 
     match &input[0..2] {
-        "E " => Ok(Message::Error {
+        "E " => Ok(Message::Error(ErrorMessage {
             content: input[2..input.len()].to_string(),
-        }),
-        "S " => Ok(Message::Say {
+            timestamp: SystemTime::now(),
+            _raw: input.to_string(),
+        })),
+        "S " => Ok(Message::Say(SayMessage {
             content: input[2..input.len()].to_string(),
+            timestamp: SystemTime::now(),
+            _raw: input.to_string(),
+        })),
+        "C " => Ok(Message::Close {
+            _raw: input.to_string(),
         }),
-        "C " => Ok(Message::Close),
         _ => Err(format!("Could not parse: {}", input)),
     }
 }
@@ -29,20 +41,19 @@ pub fn parse(input: &[u8; 512]) -> Result<Message, String> {
     // let input = input.trim_matches(char::from(0));
 
     match &input[0..1] {
-        "E" => Ok(Message::Error {
+        "E " => Ok(Message::Error(ErrorMessage {
+            content: input[2..input.len()].to_string(),
+            timestamp: SystemTime::now(),
+            _raw: input.to_string(),
+        })),
+        "S" => Ok(Message::Say(SayMessage {
             content: input[1..input.len()].to_string(),
+            timestamp: SystemTime::now(),
+            _raw: input.to_string(),
+        })),
+        "C" => Ok(Message::Close {
+            _raw: input.to_string(),
         }),
-        "S" => Ok(Message::Say {
-            content: input[1..input.len()].to_string(),
-        }),
-        "C" => Ok(Message::Close),
         _ => Err(format!("Could not parse: '{}'", input)),
     }
-}
-
-#[derive(Debug)]
-pub enum Message {
-    Say { content: String },
-    Error { content: String },
-    Close,
 }

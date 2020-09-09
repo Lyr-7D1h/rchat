@@ -1,0 +1,8 @@
+[package]
+name = "rchat-server"
+version = "0.1.0"
+authors = ["Lyr-7D1h <lyr-7d1h@pm.me>"]
+edition = "2018"
+
+[dependencies.rchat-parser]
+path='../parser'
