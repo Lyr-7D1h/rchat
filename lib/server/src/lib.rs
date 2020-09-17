@@ -1,16 +1,18 @@
-use rchat_parser::{parse, Message};
+use rchat_parser::Message;
 use std::io;
 use std::io::prelude::*;
 use std::io::Read;
 use std::net;
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 
 type Clients = Vec<mpsc::Sender<Arc<Message>>>;
 
+const MSG_SIZE: usize = 64;
+
 pub struct Server {
-    clients: Mutex<Clients>,
+    clients: Clients,
     listener: net::TcpListener,
 }
 
@@ -19,7 +21,7 @@ impl Server {
         if let Ok(listener) = net::TcpListener::bind("127.0.0.1:7567") {
             let server = Server {
                 listener,
-                clients: Mutex::new(vec![]),
+                clients: vec![],
             };
 
             Ok(server)
@@ -29,48 +31,52 @@ impl Server {
     }
 
     pub fn shutdown(&self) -> io::Result<()> {
-        for conn in self.clients.lock().unwrap().iter() {
+        for conn in self.clients.iter() {
             return conn
-                .send(Arc::new(Message::Close))
+                .send(Arc::new(Message::close()))
                 .or_else(|err| Err(io::Error::new(io::ErrorKind::Other, err)));
         }
         Ok(())
     }
 
     // Listen for new clients
-    pub fn listen(self) -> io::Result<()> {
+    pub fn listen(mut self) -> io::Result<()> {
         let (tx, rx) = mpsc::channel();
 
-        let clients = Arc::new(self.clients);
+        // let clients = Arc::new(self.clients);
 
-        let c = clients.clone();
-        thread::spawn(|| message_listener(c, rx));
+        self.listener
+            .set_nonblocking(true)
+            .expect("Could not set listener to non blocking");
 
-        for stream in self.listener.incoming() {
-            let stream = stream?;
+        loop {
+            // Check for general messages
+            if let Ok(mes) = rx.try_recv() {
+                let mes: Arc<Message> = Arc::new(mes);
 
-            let sender = tx.clone();
+                // remove bad clients
+                self.clients.retain(|client| {
+                    if let Err(err) = client.send(mes.clone()) {
+                        eprintln!("{}", err);
+                        false
+                    } else {
+                        true
+                    }
+                });
+            }
 
-            let (tx, rx) = mpsc::channel();
+            // Check new connections
+            if let Ok((stream, _socket)) = self.listener.accept() {
+                let sender = tx.clone();
 
-            clients.lock().unwrap().push(tx);
+                let (tx, rx) = mpsc::channel();
 
-            // TODO: fix ownership
-            thread::spawn(|| client_listener(stream, sender, rx));
-        }
+                self.clients.push(tx);
 
-        Ok(())
-    }
-}
-
-fn message_listener(clients: Arc<Mutex<Clients>>, rx: mpsc::Receiver<Message>) {
-    loop {
-        let mes = Arc::new(rx.recv().unwrap());
-
-        println!("{:?}", mes);
-
-        for client in clients.lock().unwrap().iter() {
-            client.send(mes.clone()).unwrap();
+                // TODO: fix ownership
+                thread::spawn(|| client_listener(stream, sender, rx));
+            }
+            sleep();
         }
     }
 }
@@ -84,8 +90,6 @@ fn client_listener(
 
     stream.set_nonblocking(true).unwrap();
 
-    let mut buffer = [0; 512];
-
     loop {
         if let Ok(mes) = receiver.try_recv() {
             if let Err(err) = stream.write(mes.raw()) {
@@ -95,16 +99,17 @@ fn client_listener(
             }
         }
 
-        match stream.read(&mut buffer) {
+        let mut buffer = [0; MSG_SIZE];
+
+        match stream.read_exact(&mut buffer) {
             Ok(_) => {
-                let input = String::from_utf8_lossy(&buffer);
-
-                println!("{}", input);
-
-                let parsed_buffer = parse(&buffer);
+                let parsed_buffer = Message::parse(&buffer);
 
                 match parsed_buffer {
                     Ok(message) => {
+                        if let Message::Say(msg) = &message {
+                            println!("CLIENT | {}", msg.content);
+                        }
                         sender.send(message).unwrap_or_else(|err| {
                             eprintln!("{}", err);
                             panic!();
@@ -112,7 +117,7 @@ fn client_listener(
                     }
                     Err(err) => {
                         if let Err(err) = stream.write(err.as_bytes()) {
-                            eprintln!("Client Error: {:?}", err);
+                            eprintln!("Parsing Error: {:?}", err);
                             break;
                         };
                     }

@@ -1,8 +1,6 @@
-extern crate ctrlc;
 use std::io;
 use std::net;
 use std::thread;
-use rchat_parser::{Message, parse};
 
 pub struct Client {}
 
@@ -16,12 +14,12 @@ impl Client {
     pub fn connect(&self) -> io::Result<()> {
         let stream = net::TcpStream::connect("127.0.0.1:7567")?;
 
-        // let stream = Arc::new(Mutex::new(stream));
+        println!("Connected...");
 
         let mut threads = vec![];
 
         {
-            let stream = stream.try_clone().unwrap(); //Arc::clone(&stream);
+            let stream = stream.try_clone().unwrap();
 
             let handler = thread::spawn(move || {
                 handlers::listen(stream);
@@ -31,22 +29,12 @@ impl Client {
         }
 
         {
-            let stream = stream.try_clone().unwrap(); //Arc::clone(&stream);
+            let stream = stream.try_clone().unwrap();
 
-            let handler = thread::spawn(move || {
-                handlers::read_input(stream) //.expect("Stopped reading input.")
-            });
+            let handler = thread::spawn(move || handlers::read_input(stream));
 
             threads.push(handler);
         }
-
-        // Shutdown stream on ctrl-c
-        // ctrlc::set_handler(move || {
-        //     stream
-        //         .shutdown(net::Shutdown::Both)
-        //         .expect("Shutdown failed");
-        // })
-        // .expect("Error setting ctrl-c handler");
 
         for handle in threads {
             handle.join().unwrap();

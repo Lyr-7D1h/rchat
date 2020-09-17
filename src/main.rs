@@ -1,6 +1,5 @@
 use std::env;
-use std::fmt;
-use std::io::{Error, ErrorKind};
+use std::io::ErrorKind;
 use std::process;
 
 use rchat_client::Client;
@@ -35,7 +34,7 @@ fn main() {
         }
         args::Config::Server => {
             println!("Starting Rex Chat Server");
-            let mut server = Server::new().unwrap_or_else(|err| {
+            let server = Server::new().unwrap_or_else(|err| {
                 eprintln!("{}", err);
                 process::exit(1);
             });

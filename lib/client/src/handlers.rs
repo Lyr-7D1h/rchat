@@ -4,23 +4,26 @@ use std::io::Write;
 use std::net;
 use std::str;
 
-use rchat_parser::{parse, Message};
+const MSG_SIZE: usize = 64;
+
+use rchat_parser::Message;
 
 pub fn listen(mut stream: net::TcpStream) {
-    let mut buffer = [0; 512];
+    let mut buffer = [0; MSG_SIZE];
 
     loop {
-        if let Err(err) = stream.read(&mut buffer) {
+        if let Err(err) = stream.read_exact(&mut buffer) {
             eprintln!("Dropped listener: {}", err);
             break;
         }
 
-        let parsed_buffer = parse(&buffer);
+        let parsed_buffer = Message::parse(&buffer);
 
         match parsed_buffer {
             Ok(message) => match message {
                 Message::Say(msg) => {
-                    println!("{:?}: {}", msg.timestamp, msg.content);
+                    // println!("{:?}", msg.content);
+                    println!("SERVER | {:?}: {}", msg.timestamp, msg.content);
                 }
                 _ => {}
             },
@@ -34,35 +37,28 @@ pub fn listen(mut stream: net::TcpStream) {
 }
 
 pub fn read_input(mut stream: net::TcpStream) {
-    // let mut buffer = vec![0; 511];
-    let mut buffer = [0; 510]; //String::new();
-    println!("Say: ");
+    let mut buffer = [0; MSG_SIZE];
 
     loop {
-        // buffer.push_str("S ");
-
         if let Err(err) = io::stdin().read(&mut buffer) {
             eprintln!("{}", err);
             break;
         }
 
-        // buffer.pop();
-        // let input = &[&[b'S'], &[b' '], &buffer[0..buffer.len()]].concat();
+        let input = str::from_utf8(&buffer).unwrap().replace("\n", "");
+        match Message::say(&input) {
+            Ok(msg) => {
+                // println!("{:?}", msg.raw());
+                if let Err(err) = stream.write(msg.raw()) {
+                    eprintln!("Dropped io listener: {}", err);
+                    break;
+                }
 
-        let input = str::from_utf8(&buffer).unwrap();
-        // let input = &[&[b'S'], &[b' '], input.trim().as_bytes()].concat();
-        let input = format!("S {}", input.replace('\n', ""));
+                stream.flush().unwrap();
 
-        println!("RP: {}", input);
-
-        if let Err(err) = stream.write(input.trim_matches('\n').as_bytes()) {
-            //stream.write(buffer.trim().as_bytes()) {
-            eprintln!("Dropped io listener: {}", err);
-            break;
+                io::empty().read(&mut buffer).unwrap();
+            }
+            Err(e) => eprintln!("{}", e),
         }
-
-        stream.flush().unwrap();
-
-        io::empty().read(&mut buffer).unwrap();
     }
 }
