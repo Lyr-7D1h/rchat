@@ -20,10 +20,10 @@ pub fn listen(mut stream: net::TcpStream) {
         let parsed_buffer = Message::parse(&buffer);
 
         match parsed_buffer {
-            Ok(message) => match message {
+            Ok(message) => match &message {
                 Message::Say(msg) => {
                     // println!("{:?}", msg.content);
-                    println!("SERVER | {:?}: {}", msg.timestamp, msg.content);
+                    println!("SERVER | {:?}: {}", message.timestamp(), msg.content);
                 }
                 _ => {}
             },
@@ -37,15 +37,15 @@ pub fn listen(mut stream: net::TcpStream) {
 }
 
 pub fn read_input(mut stream: net::TcpStream) {
-    let mut buffer = [0; MSG_SIZE];
-
     loop {
-        if let Err(err) = io::stdin().read(&mut buffer) {
+        let mut buffer = String::new();
+
+        if let Err(err) = io::stdin().read_line(&mut buffer) {
             eprintln!("{}", err);
             break;
         }
 
-        let input = str::from_utf8(&buffer).unwrap().replace("\n", "");
+        let input = buffer.trim().to_string();
         match Message::say(&input) {
             Ok(msg) => {
                 // println!("{:?}", msg.raw());
@@ -55,8 +55,6 @@ pub fn read_input(mut stream: net::TcpStream) {
                 }
 
                 stream.flush().unwrap();
-
-                io::empty().read(&mut buffer).unwrap();
             }
             Err(e) => eprintln!("{}", e),
         }

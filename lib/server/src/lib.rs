@@ -1,15 +1,14 @@
 use rchat_parser::Message;
 use std::io;
-use std::io::prelude::*;
-use std::io::Read;
 use std::net;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 
-type Clients = Vec<mpsc::Sender<Arc<Message>>>;
+mod client;
+use client::{authenticate, client_listener, Client};
 
-const MSG_SIZE: usize = 64;
+type Clients = Vec<mpsc::Sender<Arc<Message>>>;
 
 pub struct Server {
     clients: Clients,
@@ -52,91 +51,42 @@ impl Server {
         loop {
             // Check for general messages
             if let Ok(mes) = rx.try_recv() {
-                let mes: Arc<Message> = Arc::new(mes);
+                match mes {
+                    Message::Say(_) => {
+                        let mes: Arc<Message> = Arc::new(mes);
 
-                // remove bad clients
-                self.clients.retain(|client| {
-                    if let Err(err) = client.send(mes.clone()) {
-                        eprintln!("{}", err);
-                        false
-                    } else {
-                        true
+                        // remove bad clients
+                        self.clients.retain(|client| {
+                            if let Err(err) = client.send(mes.clone()) {
+                                eprintln!("{}", err);
+                                false
+                            } else {
+                                true
+                            }
+                        });
                     }
-                });
+                    _ => {}
+                }
             }
 
             // Check new connections
-            if let Ok((stream, _socket)) = self.listener.accept() {
+            if let Ok((stream, socket)) = self.listener.accept() {
                 let sender = tx.clone();
 
                 let (tx, rx) = mpsc::channel();
 
                 self.clients.push(tx);
 
-                // TODO: fix ownership
-                thread::spawn(|| client_listener(stream, sender, rx));
+                // TODO: fix ownership}
+                thread::spawn(move || {
+                    // if let Ok(client) = authenticate(stream.try_clone().unwrap(), socket) {
+                    client_listener(stream, sender, rx)
+                    // }
+                });
             }
             sleep();
         }
     }
-}
-
-fn client_listener(
-    mut stream: net::TcpStream,
-    sender: mpsc::Sender<Message>,
-    receiver: mpsc::Receiver<Arc<Message>>,
-) {
-    println!("New client");
-
-    stream.set_nonblocking(true).unwrap();
-
-    loop {
-        if let Ok(mes) = receiver.try_recv() {
-            if let Err(err) = stream.write(mes.raw()) {
-                //stream.write(buffer.trim().as_bytes()) {
-                eprintln!("Dropped io listener: {}", err);
-                break;
-            }
-        }
-
-        let mut buffer = [0; MSG_SIZE];
-
-        match stream.read_exact(&mut buffer) {
-            Ok(_) => {
-                let parsed_buffer = Message::parse(&buffer);
-
-                match parsed_buffer {
-                    Ok(message) => {
-                        if let Message::Say(msg) = &message {
-                            println!("CLIENT | {}", msg.content);
-                        }
-                        sender.send(message).unwrap_or_else(|err| {
-                            eprintln!("{}", err);
-                            panic!();
-                        });
-                    }
-                    Err(err) => {
-                        if let Err(err) = stream.write(err.as_bytes()) {
-                            eprintln!("Parsing Error: {:?}", err);
-                            break;
-                        };
-                    }
-                }
-
-                io::empty().read(&mut buffer).unwrap();
-            }
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
-                sleep();
-            }
-            Err(err) => {
-                println!("Something went wrong: {}", err);
-                stream.shutdown(net::Shutdown::Both).unwrap();
-                break;
-            }
-        }
-    }
-
-    println!("Dropped client");
 }
 
 fn sleep() {
