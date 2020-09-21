@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::thread;
 
 mod client;
-use client::{authenticate, client_listener, Client};
+use client::{authenticate, client_listener};
 
 type Clients = Vec<mpsc::Sender<Arc<Message>>>;
 
@@ -49,23 +49,20 @@ impl Server {
             .expect("Could not set listener to non blocking");
 
         loop {
-            // Check for general messages
+            // RELAY SAY MESSAGES
             if let Ok(mes) = rx.try_recv() {
-                match mes {
-                    Message::Say(_) => {
-                        let mes: Arc<Message> = Arc::new(mes);
+                if let Message::Say(_) = mes {
+                    let mes: Arc<Message> = Arc::new(mes);
 
-                        // remove bad clients
-                        self.clients.retain(|client| {
-                            if let Err(err) = client.send(mes.clone()) {
-                                eprintln!("{}", err);
-                                false
-                            } else {
-                                true
-                            }
-                        });
-                    }
-                    _ => {}
+                    // remove bad clients
+                    self.clients.retain(|client| {
+                        if let Err(err) = client.send(mes.clone()) {
+                            eprintln!("{}", err);
+                            false
+                        } else {
+                            true
+                        }
+                    });
                 }
             }
 
@@ -79,9 +76,11 @@ impl Server {
 
                 // TODO: fix ownership}
                 thread::spawn(move || {
-                    // if let Ok(client) = authenticate(stream.try_clone().unwrap(), socket) {
-                    client_listener(stream, sender, rx)
-                    // }
+                    if let Ok(client) = authenticate(stream.try_clone().unwrap(), socket) {
+                        println!("New client: {} ({})", client.username, client.socket.ip());
+
+                        client_listener(client, sender, rx)
+                    }
                 });
             }
             sleep();

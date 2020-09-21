@@ -2,7 +2,6 @@ use std::io;
 use std::io::Read;
 use std::io::Write;
 use std::net;
-use std::str;
 
 const MSG_SIZE: usize = 64;
 
@@ -22,8 +21,7 @@ pub fn listen(mut stream: net::TcpStream) {
         match parsed_buffer {
             Ok(message) => match &message {
                 Message::Say(msg) => {
-                    // println!("{:?}", msg.content);
-                    println!("SERVER | {:?}: {}", message.timestamp(), msg.content);
+                    println!("{} : {}", msg.username, msg.content);
                 }
                 _ => {}
             },
@@ -37,6 +35,27 @@ pub fn listen(mut stream: net::TcpStream) {
 }
 
 pub fn read_input(mut stream: net::TcpStream) {
+    println!("Username: ");
+    let mut buffer = String::new();
+
+    io::stdin()
+        .read_line(&mut buffer)
+        .expect("Could not read input for username");
+
+    let username = buffer.trim().to_string();
+
+    stream
+        .write(
+            Message::init(&username)
+                .expect("Could not create init message")
+                .raw(),
+        )
+        .unwrap();
+
+    stream.flush().unwrap();
+
+    println!("Connected..");
+
     loop {
         let mut buffer = String::new();
 
@@ -46,9 +65,8 @@ pub fn read_input(mut stream: net::TcpStream) {
         }
 
         let input = buffer.trim().to_string();
-        match Message::say(&input) {
+        match Message::say(&input, &username) {
             Ok(msg) => {
-                // println!("{:?}", msg.raw());
                 if let Err(err) = stream.write(msg.raw()) {
                     eprintln!("Dropped io listener: {}", err);
                     break;

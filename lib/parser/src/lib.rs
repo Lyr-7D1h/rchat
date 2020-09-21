@@ -27,15 +27,45 @@ impl Message {
                 timestamp: SystemTime::now(),
                 _raw: input.to_vec(),
             })),
-            "S " => Ok(Message::Say(SayMessage {
-                content: input_str[2..input_str.len()].to_string(),
-                timestamp: SystemTime::now(),
-                _raw: input.to_vec(),
-            })),
+            "S " => {
+                let mut input_str = input_str[2..input_str.len()].split_whitespace();
+
+                if let Some(username) = input_str.next() {
+                    let mut content = String::new();
+
+                    while let Some(x) = input_str.next() {
+                        content.push_str(x);
+                        content.push(' ');
+                    }
+
+                    input_str.for_each(|x| {
+                        content.push(' ');
+                        content.push_str(x)
+                    });
+
+                    Ok(Message::Say(SayMessage {
+                        content,
+                        username: username.to_string(),
+                        timestamp: SystemTime::now(),
+                        _raw: input.to_vec(),
+                    }))
+                } else {
+                    Err(String::from("Could not get username"))
+                }
+            }
             "C " => Ok(Message::Close(CloseMessage {
                 _raw: input.to_vec(),
                 timestamp: SystemTime::now(),
             })),
+            "I " => {
+                let username = input_str[2..input_str.len()].to_string();
+
+                Ok(Message::Init(InitMessage {
+                    _raw: input.to_vec(),
+                    timestamp: SystemTime::now(),
+                    username,
+                }))
+            }
             _ => Err(format!("Could not parse: '{}'", input_str)),
         }
     }
@@ -65,18 +95,32 @@ impl Message {
         }))
     }
 
-    pub fn say(message: &String) -> Result<Message, String> {
-        if message.len() > MSG_SIZE - 2 {
+    pub fn say(message: &String, username: &String) -> Result<Message, String> {
+        if message.len() > MSG_SIZE - 2 - username.len() {
             return Err("Message is too long".to_string());
         }
 
-        let mut raw = format!("S {}", message).to_string().into_bytes();
+        let mut raw = format!("S {} {}", username, message)
+            .to_string()
+            .into_bytes();
         raw.resize(MSG_SIZE, 0);
 
         Ok(Message::Say(SayMessage {
             _raw: raw,
+            username: username.to_string(),
             content: message.to_string(),
             timestamp: SystemTime::now(),
+        }))
+    }
+
+    pub fn init(username: &String) -> Result<Message, String> {
+        let mut raw = format!("I {}", username).to_string().into_bytes();
+        raw.resize(MSG_SIZE, 0);
+
+        Ok(Message::Init(InitMessage {
+            _raw: raw,
+            timestamp: SystemTime::now(),
+            username: username.to_string(),
         }))
     }
 
@@ -103,6 +147,7 @@ impl Message {
 pub struct SayMessage {
     _raw: Vec<u8>,
     timestamp: SystemTime,
+    pub username: String,
     pub content: String,
 }
 

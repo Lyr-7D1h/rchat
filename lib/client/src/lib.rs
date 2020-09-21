@@ -1,6 +1,9 @@
 use std::io;
+use std::io::{Read, Write};
 use std::net;
 use std::thread;
+
+use rchat_parser::Message;
 
 pub struct Client {}
 
@@ -13,8 +16,6 @@ impl Client {
 
     pub fn connect(&self) -> io::Result<()> {
         let stream = net::TcpStream::connect("127.0.0.1:7567")?;
-
-        println!("Connected...");
 
         let mut threads = vec![];
 

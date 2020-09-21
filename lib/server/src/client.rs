@@ -10,9 +10,9 @@ use std::thread;
 const MSG_SIZE: usize = 64;
 
 pub struct Client {
-    stream: net::TcpStream,
-    socket: net::SocketAddr,
-    username: String,
+    pub stream: net::TcpStream,
+    pub socket: net::SocketAddr,
+    pub username: String,
 }
 
 pub fn authenticate(mut stream: net::TcpStream, socket: net::SocketAddr) -> Result<Client, String> {
@@ -44,35 +44,37 @@ pub fn authenticate(mut stream: net::TcpStream, socket: net::SocketAddr) -> Resu
         sleep();
     }
 }
-
 pub fn client_listener(
-    mut stream: net::TcpStream,
+    mut client: Client,
     sender: mpsc::Sender<Message>,
     receiver: mpsc::Receiver<Arc<Message>>,
 ) {
-    println!("New client");
-
-    stream.set_nonblocking(true).unwrap();
+    client.stream.set_nonblocking(true).unwrap();
 
     let mut buffer = [0; MSG_SIZE];
 
     loop {
         // Listen to general messenger
         if let Ok(mes) = receiver.try_recv() {
-            if let Err(_) = stream.write(mes.raw()) {
+            if let Err(_) = client.stream.write(mes.raw()) {
                 break;
             }
         }
 
         // Listen to messenger
-        match stream.read_exact(&mut buffer) {
+        match client.stream.read_exact(&mut buffer) {
             Ok(_) => {
                 let parsed_buffer = Message::parse(&buffer);
 
                 match parsed_buffer {
                     Ok(message) => {
                         if let Message::Say(msg) = &message {
-                            println!("CLIENT | {}", msg.content);
+                            println!(
+                                "({}) {} : {} ",
+                                client.socket.ip(),
+                                client.username,
+                                msg.content
+                            );
                         }
                         match &message {
                             Message::Close(_) => {
@@ -88,7 +90,7 @@ pub fn client_listener(
                         });
                     }
                     Err(err) => {
-                        if let Err(err) = stream.write(err.as_bytes()) {
+                        if let Err(err) = client.stream.write(err.as_bytes()) {
                             eprintln!("Parsing Error: {:?}", err);
                             break;
                         };
@@ -102,7 +104,7 @@ pub fn client_listener(
             }
             Err(err) => {
                 println!("Something went wrong: {}", err);
-                stream.shutdown(net::Shutdown::Both).unwrap();
+                client.stream.shutdown(net::Shutdown::Both).unwrap();
                 break;
             }
         }
